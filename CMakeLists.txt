@@ -25,10 +25,6 @@ add_library(deno_cpp_binding SHARED
         binding.cpp
 )
 
-file(GLOB_RECURSE MODULE_FILES
-        "${CMAKE_CURRENT_SOURCE_DIR}/Modules/*.ixx"
-)
-
 target_include_directories(deno_cpp_binding
         PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
@@ -48,10 +44,3 @@ if(WIN32)
             WINDOWS_EXPORT_ALL_SYMBOLS TRUE
     )
 endif()
-
-target_sources(deno_cpp_binding
-        PUBLIC
-        FILE_SET CXX_MODULES TYPE CXX_MODULES
-        BASE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}"
-        FILES ${MODULE_FILES}
-)
