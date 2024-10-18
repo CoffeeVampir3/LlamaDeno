@@ -141,9 +141,11 @@ class SamplerBuilder {
         const view = new DataView(buffer);
 
         // Fill the buffer with the logit bias data
+
+        // only works for little endian rn
         logitBias.forEach((bias, index) => {
-            view.setInt32(index * 8, bias.token, true);  // true for little-endian
-            view.setFloat32(index * 8 + 4, bias.bias, true);  // true for little-endian
+            view.setInt32(index * 8, bias.token, true);
+            view.setFloat32(index * 8 + 4, bias.bias, true);
         });
 
         // Get a pointer to the buffer

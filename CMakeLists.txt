@@ -18,6 +18,7 @@ FetchContent_Declare(
 set(LLAMA_BUILD_EXAMPLES OFF CACHE BOOL "llama.cpp: build examples" FORCE)
 set(LLAMA_BUILD_TESTS OFF CACHE BOOL "llama.cpp: build tests" FORCE)
 set(LLAMA_BUILD_SERVER OFF CACHE BOOL "llama.cpp: build server" FORCE)
+set(LLAMA_STATIC ON CACHE BOOL "llama.cpp: static link libraries" FORCE)
 
 FetchContent_MakeAvailable(llama)
 
