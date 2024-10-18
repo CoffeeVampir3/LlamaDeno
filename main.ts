@@ -40,8 +40,8 @@ try {
     console.log("Calling C++ function from Deno:");
     const modelPath = "/home/blackroot/Desktop/LlamaDeno/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf";
     const prompt = "hi";
-    const numberTokensToPredict = 100;
-    const numberGpuLayers = 1;
+    const numberTokensToPredict = 20;
+    const numberGpuLayers = 40;
 
     const modelPathPtr = new TextEncoder().encode(modelPath + "\0");
     const promptPtr = new TextEncoder().encode(prompt + "\0");
