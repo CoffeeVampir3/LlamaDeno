@@ -18,7 +18,10 @@ FetchContent_Declare(
 set(LLAMA_BUILD_EXAMPLES OFF CACHE BOOL "llama.cpp: build examples" FORCE)
 set(LLAMA_BUILD_TESTS OFF CACHE BOOL "llama.cpp: build tests" FORCE)
 set(LLAMA_BUILD_SERVER OFF CACHE BOOL "llama.cpp: build server" FORCE)
-set(LLAMA_STATIC ON CACHE BOOL "llama.cpp: static link libraries" FORCE)
+
+if(WIN32)
+    set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build static libraries" FORCE)
+endif()
 
 FetchContent_MakeAvailable(llama)
 
@@ -43,5 +46,11 @@ set_target_properties(deno_cpp_binding PROPERTIES
 if(WIN32)
     set_target_properties(deno_cpp_binding PROPERTIES
             WINDOWS_EXPORT_ALL_SYMBOLS TRUE
+    )
+
+    add_custom_command(TARGET deno_cpp_binding POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            $<TARGET_FILE_DIR:llama>/*.dll
+            $<TARGET_FILE_DIR:deno_cpp_binding>
     )
 endif()
