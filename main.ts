@@ -17,8 +17,22 @@ const libInterface = {
         ],
         result: "pointer" as const  // void*
     },
+    MakeSampler: {
+        parameters: [
+            "pointer",  // void* llamaModel
+        ],
+        result: "pointer" as const  // void*
+    },
     GreedySampler: {
-        parameters: [],
+        parameters: ["pointer"],  // void* sampler
+        result: "pointer" as const  // void*
+    },
+    TopK: {
+        parameters: ["pointer", "i32"],  // void* sampler, int num
+        result: "pointer" as const  // void*
+    },
+    TopP: {
+        parameters: ["pointer", "f32", "f32"],  // void* sampler, float p, float minKeep
         result: "pointer" as const  // void*
     },
     Infer: {
@@ -32,6 +46,33 @@ const libInterface = {
         result: "void" as const
     },
 } as const;
+
+class SamplerBuilder {
+    private sampler: Deno.PointerValue;
+
+    constructor(private lib: Deno.DynamicLibrary<typeof libInterface>, llamaModel: Deno.PointerValue) {
+        this.sampler = this.lib.symbols.MakeSampler(llamaModel);
+    }
+
+    greedy(): this {
+        this.sampler = this.lib.symbols.GreedySampler(this.sampler);
+        return this;
+    }
+
+    topK(num: number): this {
+        this.sampler = this.lib.symbols.TopK(this.sampler, num);
+        return this;
+    }
+
+    topP(p: number, minKeep: number): this {
+        this.sampler = this.lib.symbols.TopP(this.sampler, p, minKeep);
+        return this;
+    }
+
+    build(): Deno.PointerValue {
+        return this.sampler;
+    }
+}
 
 // Define the library name and path
 const libName = "deno_cpp_binding";
@@ -78,7 +119,10 @@ try {
     );
 
     // GreedySampler
-    const sampler = lib.symbols.GreedySampler();
+    const samplerBuilder = new SamplerBuilder(lib, llamaModel);
+    const sampler = samplerBuilder
+        .topK(40)
+        .build();
 
     // For Infer, we need to create a vector of tokens
     // This is a simplified example and may need adjustment based on your actual implementation

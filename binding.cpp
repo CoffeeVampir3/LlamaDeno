@@ -19,7 +19,7 @@ void* InitiateCtx(void* llamaModel, const unsigned contextLength, const unsigned
     llama_context_params ctx_params = llama_context_default_params();
     ctx_params.n_ctx = contextLength;
     ctx_params.n_batch = numBatches;
-    ctx_params.no_perf = false;
+    ctx_params.no_perf = true;
     llama_context* ctx = llama_new_context_with_model(model, ctx_params);
 
     if (ctx == nullptr) {
@@ -31,26 +31,91 @@ void* InitiateCtx(void* llamaModel, const unsigned contextLength, const unsigned
     return ctx;
 }
 
-void* GreedySampler()
+void* MakeSampler(void* llamaModelPtr)
 {
-    auto sParams = llama_sampler_chain_default_params();
-    sParams.no_perf = false;
-    llama_sampler* sampler = llama_sampler_chain_init(sParams);
-    llama_sampler_chain_add(sampler, llama_sampler_init_greedy());
+    const auto* llamaModel = static_cast<llama_model*>(llamaModelPtr);
 
+    llama_sampler_chain_params lparams = llama_sampler_chain_default_params();
+    lparams.no_perf = true;
+    auto sampler = llama_sampler_chain_init(lparams);
+    const auto params = common_sampler_params{
+        .seed = LLAMA_DEFAULT_SEED,
+        .n_prev = 64,
+        .n_probs = 0,
+        .min_keep = 0,
+        .top_k = 40,
+        .top_p = 0.95f,
+        .min_p = 0.05f,
+        .xtc_probability = 0.00f,
+        .xtc_threshold = 0.10f,
+        .tfs_z = 1.00f,
+        .typ_p = 1.00f,
+        .temp = 15.0f,
+        .dynatemp_range = 0.00f,
+        .dynatemp_exponent = 1.00f,
+        .penalty_last_n = 64,
+        .penalty_repeat = 1.00f,
+        .penalty_freq = 0.00f,
+        .penalty_present = 0.00f,
+        .mirostat = 0,
+        .mirostat_tau = 5.00f,
+        .mirostat_eta = 0.10f,
+        .penalize_nl = false,
+        .ignore_eos = false,
+        .no_perf = false
+    };
+    llama_sampler_chain_add(sampler,
+            llama_sampler_init_logit_bias(
+                llama_n_vocab(llamaModel),
+                params.logit_bias.size(),
+                params.logit_bias.data()));
+
+    llama_sampler_chain_add(sampler,
+            llama_sampler_init_penalties(
+                llama_n_vocab  (llamaModel),
+                llama_token_eos(llamaModel),
+                llama_token_nl (llamaModel),
+                params.penalty_last_n,
+                params.penalty_repeat,
+                params.penalty_freq,
+                params.penalty_present,
+                params.penalize_nl,
+                params.ignore_eos));
+
+    llama_sampler_chain_add(sampler, llama_sampler_init_temp (params.temp));
+    return sampler;
+}
+
+void* GreedySampler(void* sampler)
+{
+    llama_sampler_chain_add(static_cast<llama_sampler*>(sampler), llama_sampler_init_greedy());
+    return sampler;
+}
+
+void* TopK(void* sampler, const int num)
+{
+    llama_sampler_chain_add(static_cast<llama_sampler*>(sampler), llama_sampler_init_top_k(num));
+    llama_sampler_chain_add(static_cast<llama_sampler*>(sampler), llama_sampler_init_softmax());
+    llama_sampler_chain_add(static_cast<llama_sampler*>(sampler), llama_sampler_init_dist(1337));
+    return sampler;
+}
+
+void* TopP(void* sampler, const float p, const float minKeep)
+{
+    llama_sampler_chain_add(static_cast<llama_sampler*>(sampler), llama_sampler_init_top_p(p, minKeep));
     return sampler;
 }
 
 std::optional<std::string> TokenToPiece(llama_model* llamaModel, unsigned id)
 {
     char buf[128];
-    unsigned n = llama_token_to_piece(llamaModel, id, buf, sizeof(buf), 0, true);
+    int n = llama_token_to_piece(llamaModel, id, buf, sizeof(buf), 0, true);
     if (n < 0) {
         std::print(stderr, "error: failed to convert token to piece @ {} {}\n",
             std::source_location::current().function_name(), std::source_location::current().line());
         return std::nullopt;
     }
-    return std::string{buf, n};
+    return std::string{buf, static_cast<size_t>(n)};
 }
 
 std::optional<std::vector<llama_token>> TokenizePrompt(llama_model* llamaModel, const std::string_view& prompt)

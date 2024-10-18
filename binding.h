@@ -1,5 +1,6 @@
 #include "llama.h"
 #include "common/common.h"
+#include "common/sampling.h"
 import std;
 
 #ifndef BINDING_H
@@ -11,7 +12,10 @@ extern "C" {
 
     void* LoadModel(const char *modelPath, int numberGpuLayers);
     void* InitiateCtx(void* llamaModel, unsigned contextLength, unsigned numBatches);
-    void* GreedySampler();
+    void* MakeSampler(void* llamaModelPtr);
+    void* GreedySampler(void* sampler);
+    void* TopK(void* sampler, int num);
+    void* TopP(void* sampler, float p, float minKeep);
     void Infer(
         void* llamaModelPtr,
         void* samplerPtr,
