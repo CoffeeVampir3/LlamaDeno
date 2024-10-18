@@ -9,6 +9,7 @@ void* LoadModel(const char *modelPath, int numberGpuLayers)
     model_params.n_gpu_layers = numberGpuLayers;
 
     llama_model* model = llama_load_model_from_file(modelPath, model_params);
+
     return model;
 }
 
@@ -35,8 +36,8 @@ void* GreedySampler()
     auto sParams = llama_sampler_chain_default_params();
     sParams.no_perf = false;
     llama_sampler* sampler = llama_sampler_chain_init(sParams);
-
     llama_sampler_chain_add(sampler, llama_sampler_init_greedy());
+
     return sampler;
 }
 
@@ -52,13 +53,31 @@ std::optional<std::string> TokenToPiece(llama_model* llamaModel, unsigned id)
     return std::string{buf, n};
 }
 
+std::optional<std::vector<llama_token>> TokenizePrompt(llama_model* llamaModel, const std::string_view& prompt)
+{
+    const int n_prompt = -llama_tokenize(llamaModel, prompt.data(), prompt.size(), nullptr, 0, true, true);
+    std::vector<llama_token> tokenizedPrompt(n_prompt);
+    if (llama_tokenize(llamaModel, prompt.data(), prompt.size(), tokenizedPrompt.data(), tokenizedPrompt.size(), true, true) < 0) {
+        std::print(stderr, "error: failed to tokenize the prompt @ {} {}\n",
+            std::source_location::current().function_name(), std::source_location::current().line());
+        return std::nullopt;
+    }
+    return tokenizedPrompt;
+}
+
 void Infer(
-    llama_model* llamaModel,
-    llama_sampler* sampler,
-    llama_context* context,
-    std::vector<llama_token>& promptTokens,
+    void* llamaModelPtr,
+    void* samplerPtr,
+    void* contextPtr,
+    const char *prompt,
     const unsigned numberTokensToPredict)
 {
+    const auto llamaModel = static_cast<llama_model*>(llamaModelPtr);
+    const auto sampler = static_cast<llama_sampler*>(samplerPtr);
+    const auto context = static_cast<llama_context*>(contextPtr);
+
+    auto promptTokens = TokenizePrompt(llamaModel, prompt).value();
+
     const int numTokensToGenerate = (promptTokens.size() - 1) + numberTokensToPredict;
     llama_batch batch = llama_batch_get_one(promptTokens.data(), promptTokens.size(), 0, 0);
 
@@ -107,36 +126,4 @@ void FreeCtx(llama_context* ctx)
 void FreeModel(llama_model* model)
 {
     llama_free_model(model);
-}
-
-std::optional<std::vector<llama_token>> TokenizePrompt(llama_model* llamaModel, const std::string_view& prompt)
-{
-    const int n_prompt = -llama_tokenize(llamaModel, prompt.data(), prompt.size(), nullptr, 0, true, true);
-    std::vector<llama_token> tokenizedPrompt(n_prompt);
-    if (llama_tokenize(llamaModel, prompt.data(), prompt.size(), tokenizedPrompt.data(), tokenizedPrompt.size(), true, true) < 0) {
-        std::print(stderr, "error: failed to tokenize the prompt @ {} {}\n",
-            std::source_location::current().function_name(), std::source_location::current().line());
-        return std::nullopt;
-    }
-    return tokenizedPrompt;
-}
-
-void testThing(const char *modelPath, const char* prompt, int numberTokensToPredict, const int numberGpuLayers)
-{
-    auto* model = static_cast<llama_model*>(LoadModel(modelPath, numberGpuLayers));
-
-    std::vector<llama_token> promptTokens = TokenizePrompt(model, prompt).value();
-    auto* ctx = static_cast<llama_context*>(InitiateCtx(model, promptTokens.size() - 1 + numberTokensToPredict - 1, 1));
-    auto smpl = static_cast<llama_sampler*>(GreedySampler());
-
-    //print prompt
-    for (auto id : promptTokens) {
-        std::print("{}", TokenToPiece(model, id).value());
-    }
-
-    Infer(model, smpl, ctx, promptTokens, numberTokensToPredict);
-
-    FreeSampler(smpl);
-    FreeCtx(ctx);
-    FreeModel(model);
 }

@@ -8,6 +8,9 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
 
 project(DenoCppInterop)
 
+#add_compile_definitions(GGML_USE_CUDA)
+#add_compile_definitions(GGML_USE_CUBLAS)
+
 include(FetchContent)
 FetchContent_Declare(
         llama

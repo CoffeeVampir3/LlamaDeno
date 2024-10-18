@@ -2,12 +2,32 @@
 
 // Define the library interface
 const libInterface = {
-    testThing: {
+    LoadModel: {
         parameters: [
             "pointer",  // const char *modelPath
+            "i32",      // int numberGpuLayers
+        ],
+        result: "pointer" as const  // void*
+    },
+    InitiateCtx: {
+        parameters: [
+            "pointer",  // void* llamaModel
+            "u32",      // unsigned contextLength
+            "u32",      // unsigned numBatches
+        ],
+        result: "pointer" as const  // void*
+    },
+    GreedySampler: {
+        parameters: [],
+        result: "pointer" as const  // void*
+    },
+    Infer: {
+        parameters: [
+            "pointer",  // void* llamaModelPtr
+            "pointer",  // void* samplerPtr
+            "pointer",  // void* contextPtr
             "pointer",  // const char *prompt
-            "i32",      // int numberTokensToPredict
-            "i32"       // int numberGpuLayers
+            "u32",      // unsigned numberTokensToPredict
         ],
         result: "void" as const
     },
@@ -27,7 +47,6 @@ if (!libSuffix) {
 
 const scriptDir = new URL(".", import.meta.url).pathname;
 const libPath = `${scriptDir}lib/${libName}.${libSuffix}`;
-
 try {
     console.log(`Attempting to load library from: ${libPath}`);
 
@@ -36,21 +55,43 @@ try {
 
     console.log("Library loaded successfully.");
 
-    // Call the function
-    console.log("Calling C++ function from Deno:");
+    // Example usage of the functions
     const modelPath = "/home/blackroot/Desktop/LlamaDeno/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf";
-    const prompt = "hi";
-    const numberTokensToPredict = 20;
     const numberGpuLayers = 40;
+    const contextLength = 2048;
+    const numBatches = 1;
+    const numberTokensToPredict = 20;
 
     const modelPathPtr = new TextEncoder().encode(modelPath + "\0");
+
+    // LoadModel
+    const llamaModel = lib.symbols.LoadModel(
+        Deno.UnsafePointer.of(modelPathPtr),
+        numberGpuLayers
+    );
+
+    // InitiateCtx
+    const context = lib.symbols.InitiateCtx(
+        llamaModel,
+        contextLength,
+        numBatches
+    );
+
+    // GreedySampler
+    const sampler = lib.symbols.GreedySampler();
+
+    // For Infer, we need to create a vector of tokens
+    // This is a simplified example and may need adjustment based on your actual implementation
+    const prompt = "Hello, how are you?";
     const promptPtr = new TextEncoder().encode(prompt + "\0");
 
-    lib.symbols.testThing(
-        Deno.UnsafePointer.of(modelPathPtr),
+    // Infer
+    lib.symbols.Infer(
+        llamaModel,
+        sampler,
+        context,
         Deno.UnsafePointer.of(promptPtr),
-        numberTokensToPredict,
-        numberGpuLayers
+        numberTokensToPredict
     );
 
     // Close the library when done

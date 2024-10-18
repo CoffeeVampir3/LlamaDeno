@@ -9,7 +9,15 @@ import std;
 extern "C" {
 #endif
 
-    void testThing(const char* modelPath, const char* prompt, int numberTokensToPredict, int numberGpuLayers);
+    void* LoadModel(const char *modelPath, int numberGpuLayers);
+    void* InitiateCtx(void* llamaModel, unsigned contextLength, unsigned numBatches);
+    void* GreedySampler();
+    void Infer(
+        void* llamaModelPtr,
+        void* samplerPtr,
+        void* contextPtr,
+        const char *prompt,
+        unsigned numberTokensToPredict);
 
 #ifdef __cplusplus
 }
