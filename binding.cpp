@@ -1,6 +1,4 @@
 #include "binding.h"
-#include "llama.h"
-import std;
 
 void testThing() {
   std::print("Hello world.");
