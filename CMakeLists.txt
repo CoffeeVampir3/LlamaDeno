@@ -43,6 +43,8 @@ if(WIN32)
     set_target_properties(deno_cpp_binding PROPERTIES
             WINDOWS_EXPORT_ALL_SYMBOLS TRUE
     )
+    
+    add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
 
     add_custom_command(TARGET deno_cpp_binding POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
