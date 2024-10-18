@@ -19,10 +19,6 @@ set(LLAMA_BUILD_EXAMPLES OFF CACHE BOOL "llama.cpp: build examples" FORCE)
 set(LLAMA_BUILD_TESTS OFF CACHE BOOL "llama.cpp: build tests" FORCE)
 set(LLAMA_BUILD_SERVER OFF CACHE BOOL "llama.cpp: build server" FORCE)
 
-if(WIN32)
-    set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build static libraries" FORCE)
-endif()
-
 FetchContent_MakeAvailable(llama)
 
 add_library(deno_cpp_binding SHARED
@@ -50,7 +46,7 @@ if(WIN32)
 
     add_custom_command(TARGET deno_cpp_binding POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            $<TARGET_FILE_DIR:llama>/*.dll
-            $<TARGET_FILE_DIR:deno_cpp_binding>
+            ${CMAKE_BINARY_DIR}/bin/*.dll
+            ${CMAKE_SOURCE_DIR}/lib/
     )
 endif()
