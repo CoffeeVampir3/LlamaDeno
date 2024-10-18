@@ -2,7 +2,15 @@
 
 // Define the library interface
 const libInterface = {
-    testThing: { parameters: [], result: "void" as const },
+    testThing: {
+        parameters: [
+            "pointer",  // const char *modelPath
+            "pointer",  // const char *prompt
+            "i32",      // int numberTokensToPredict
+            "i32"       // int numberGpuLayers
+        ],
+        result: "void" as const
+    },
 } as const;
 
 // Define the library name and path
@@ -30,7 +38,20 @@ try {
 
     // Call the function
     console.log("Calling C++ function from Deno:");
-    lib.symbols.testThing();
+    const modelPath = "/home/blackroot/Desktop/LlamaDeno/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf";
+    const prompt = "hi";
+    const numberTokensToPredict = 100;
+    const numberGpuLayers = 1;
+
+    const modelPathPtr = new TextEncoder().encode(modelPath + "\0");
+    const promptPtr = new TextEncoder().encode(prompt + "\0");
+
+    lib.symbols.testThing(
+        Deno.UnsafePointer.of(modelPathPtr),
+        Deno.UnsafePointer.of(promptPtr),
+        numberTokensToPredict,
+        numberGpuLayers
+    );
 
     // Close the library when done
     lib.close();

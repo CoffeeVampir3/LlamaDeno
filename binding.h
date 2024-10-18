@@ -1,4 +1,5 @@
 #include "llama.h"
+#include "common/common.h"
 import std;
 
 #ifndef BINDING_H
@@ -8,9 +9,7 @@ import std;
 extern "C" {
 #endif
 
-    void testThing();
-
-    static std::string llama_token_to_str(const struct llama_context * ctx, llama_token token);
+    void testThing(const char* modelPath, const char* prompt, int numberTokensToPredict, int numberGpuLayers);
 
 #ifdef __cplusplus
 }
