@@ -19,6 +19,13 @@ set(LLAMA_BUILD_EXAMPLES OFF CACHE BOOL "llama.cpp: build examples" FORCE)
 set(LLAMA_BUILD_TESTS OFF CACHE BOOL "llama.cpp: build tests" FORCE)
 set(LLAMA_BUILD_SERVER OFF CACHE BOOL "llama.cpp: build server" FORCE)
 
+if(MSVC)
+    add_compile_definitions(
+            _CRT_SECURE_NO_WARNINGS
+            LLAMA_CPP_PROB_FIX         # Add this definition for MSVC
+    )
+endif()
+
 FetchContent_MakeAvailable(llama)
 
 add_library(deno_cpp_binding SHARED
@@ -43,8 +50,6 @@ if(WIN32)
     set_target_properties(deno_cpp_binding PROPERTIES
             WINDOWS_EXPORT_ALL_SYMBOLS TRUE
     )
-    
-    add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
 
     add_custom_command(TARGET deno_cpp_binding POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
