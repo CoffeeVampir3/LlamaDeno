@@ -1,7 +1,5 @@
 #include "llama.h"
 #include "common/common.h"
-#include "common/sampling.h"
-import std;
 
 #ifndef BINDING_H
 #define BINDING_H
