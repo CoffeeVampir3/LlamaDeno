@@ -1,7 +1,6 @@
 #include "binding.h"
 
-#include <print>
-#include <source_location>
+#include <iostream>
 #include <optional>
 
 void* LoadModel(const char *modelPath, int numberGpuLayers)
@@ -24,8 +23,7 @@ void* InitiateCtx(void* llamaModel, const unsigned contextLength, const unsigned
     llama_context* ctx = llama_new_context_with_model(model, ctx_params);
 
     if (ctx == nullptr) {
-        std::print(stderr, "error: couldn't make llama ctx @ {} {}\n",
-            std::source_location::current().function_name(), std::source_location::current().line());
+        std::cerr << "error: couldn't make llama ctx in InitiateCtx()" << std::endl;
         return nullptr;
     }
 
@@ -171,8 +169,7 @@ std::optional<std::string> TokenToPiece(const llama_model* llamaModel, const uns
     char buf[128];
     int n = llama_token_to_piece(llamaModel, id, buf, sizeof(buf), 0, true);
     if (n < 0) {
-        std::print(stderr, "error: failed to convert token to piece @ {} {}\n",
-            std::source_location::current().function_name(), std::source_location::current().line());
+        std::cerr << "error: failed to convert token to piece in TokenToPiece()" << std::endl;
         return std::nullopt;
     }
     return std::string{buf, static_cast<size_t>(n)};
@@ -183,8 +180,7 @@ std::optional<std::vector<llama_token>> TokenizePrompt(const llama_model* llamaM
     const int n_prompt = -llama_tokenize(llamaModel, prompt.data(), prompt.size(), nullptr, 0, true, true);
     std::vector<llama_token> tokenizedPrompt(n_prompt);
     if (llama_tokenize(llamaModel, prompt.data(), prompt.size(), tokenizedPrompt.data(), tokenizedPrompt.size(), true, true) < 0) {
-        std::print(stderr, "error: failed to tokenize the prompt @ {} {}\n",
-            std::source_location::current().function_name(), std::source_location::current().line());
+        std::cerr << "error: failed to tokenize the prompt in TokenizePrompt()" << std::endl;
         return std::nullopt;
     }
     return tokenizedPrompt;
@@ -212,8 +208,7 @@ void Infer(
     for (int tokenPosition = 0; tokenPosition + batch.n_tokens < numTokensToGenerate; ++tokenPosition ) {
         // evaluate the current batch with the transformer model
         if (llama_decode(context, batch)) {
-            std::print(stderr, "error: failed to eval, return code 1 @ {} {}\n",
-                std::source_location::current().function_name(), std::source_location::current().line());
+            std::cerr << "error: failed to eval, return code 1 in Infer()" << std::endl;
             return;
         }
 
@@ -228,7 +223,8 @@ void Infer(
                 break;
             }
 
-            std::print("{}", TokenToPiece(llamaModel, newTokenId).value());
+            std::cout << TokenToPiece(llamaModel, newTokenId).value();
+            std::flush(std::cout);
 
             // prepare the next batch with the sampled token
             batch = llama_batch_get_one(&newTokenId, 1, tokenPosition, 0);
