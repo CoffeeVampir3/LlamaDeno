@@ -2,6 +2,7 @@
 
 #include <print>
 #include <source_location>
+#include <optional>
 
 void* LoadModel(const char *modelPath, int numberGpuLayers)
 {
@@ -31,82 +32,141 @@ void* InitiateCtx(void* llamaModel, const unsigned contextLength, const unsigned
     return ctx;
 }
 
-void* MakeSampler(void* llamaModelPtr)
+void* MakeSampler()
 {
-    const auto* llamaModel = static_cast<llama_model*>(llamaModelPtr);
-
     llama_sampler_chain_params lparams = llama_sampler_chain_default_params();
     lparams.no_perf = true;
-    auto sampler = llama_sampler_chain_init(lparams);
-    const auto params = common_sampler_params{
-        .seed = LLAMA_DEFAULT_SEED,
-        .n_prev = 64,
-        .n_probs = 0,
-        .min_keep = 0,
-        .top_k = 40,
-        .top_p = 0.95f,
-        .min_p = 0.05f,
-        .xtc_probability = 0.00f,
-        .xtc_threshold = 0.10f,
-        .tfs_z = 1.00f,
-        .typ_p = 1.00f,
-        .temp = 15.0f,
-        .dynatemp_range = 0.00f,
-        .dynatemp_exponent = 1.00f,
-        .penalty_last_n = 64,
-        .penalty_repeat = 1.00f,
-        .penalty_freq = 0.00f,
-        .penalty_present = 0.00f,
-        .mirostat = 0,
-        .mirostat_tau = 5.00f,
-        .mirostat_eta = 0.10f,
-        .penalize_nl = false,
-        .ignore_eos = false,
-        .no_perf = false
-    };
-    llama_sampler_chain_add(sampler,
-            llama_sampler_init_logit_bias(
-                llama_n_vocab(llamaModel),
-                params.logit_bias.size(),
-                params.logit_bias.data()));
-
-    llama_sampler_chain_add(sampler,
-            llama_sampler_init_penalties(
-                llama_n_vocab  (llamaModel),
-                llama_token_eos(llamaModel),
-                llama_token_nl (llamaModel),
-                params.penalty_last_n,
-                params.penalty_repeat,
-                params.penalty_freq,
-                params.penalty_present,
-                params.penalize_nl,
-                params.ignore_eos));
-
-    llama_sampler_chain_add(sampler, llama_sampler_init_temp (params.temp));
+    const auto sampler = llama_sampler_chain_init(lparams);
     return sampler;
 }
 
+// Independent of order
+void* DistSampler(void* sampler, uint32_t seed)
+{
+    llama_sampler_chain_add(static_cast<llama_sampler*>(sampler), llama_sampler_init_dist(seed));
+    return sampler;
+}
+
+// Independent of order
+void* GrammarSampler(void* sampler, const llama_model* model, const char* grammar, const char* root)
+{
+    llama_sampler_chain_add(static_cast<llama_sampler*>(sampler), llama_sampler_init_grammar(model, grammar, root));
+    return sampler;
+}
+
+// Typically used as the last sampler in the chain
 void* GreedySampler(void* sampler)
 {
     llama_sampler_chain_add(static_cast<llama_sampler*>(sampler), llama_sampler_init_greedy());
     return sampler;
 }
 
-void* TopK(void* sampler, const int num)
+// Independent of order
+void* InfillSampler(void* sampler, const llama_model* model)
 {
-    llama_sampler_chain_add(static_cast<llama_sampler*>(sampler), llama_sampler_init_top_k(num));
+    llama_sampler_chain_add(static_cast<llama_sampler*>(sampler), llama_sampler_init_infill(model));
+    return sampler;
+}
+
+// Typically applied early in the sampling chain
+void* LogitBiasSampler(void* sampler, const llama_model* model, size_t nBias, const llama_logit_bias* logitBias)
+{
+    llama_sampler_chain_add(
+        static_cast<llama_sampler*>(sampler),
+        llama_sampler_init_logit_bias(
+            llama_n_vocab(model),
+            nBias,
+            logitBias
+        )
+    );
+    return sampler;
+}
+
+// Independent of order, but typically applied after topK or topP
+void* MinPSampler(void* sampler, float minP, size_t minKeep)
+{
+    llama_sampler_chain_add(static_cast<llama_sampler*>(sampler), llama_sampler_init_min_p(minP, minKeep));
+    return sampler;
+}
+
+// Depends on temperature, should be applied after tempSampler
+void* MirostatSampler(void* sampler, int nVocab, uint32_t seed, float tau, float eta, int m)
+{
+    llama_sampler_chain_add(static_cast<llama_sampler*>(sampler), llama_sampler_init_mirostat(nVocab, seed, tau, eta, m));
+    return sampler;
+}
+
+// Depends on temperature, should be applied after tempSampler
+void* MirostatV2Sampler(void* sampler, uint32_t seed, float tau, float eta)
+{
+    llama_sampler_chain_add(static_cast<llama_sampler*>(sampler), llama_sampler_init_mirostat_v2(seed, tau, eta));
+    return sampler;
+}
+
+// Typically applied early in the sampling chain
+void* PenaltiesSampler(void* sampler, int nVocab, llama_token eosToken, llama_token nlToken, int penaltyLastN, float penaltyRepeat, float penaltyFreq, float penaltyPresent, bool penalizeNl, bool ignoreEos)
+{
+    llama_sampler_chain_add(static_cast<llama_sampler*>(sampler), llama_sampler_init_penalties(nVocab, eosToken, nlToken, penaltyLastN, penaltyRepeat, penaltyFreq, penaltyPresent, penalizeNl, ignoreEos));
+    return sampler;
+}
+
+// Typically applied after other sampling methods and before distSampler
+void* SoftmaxSampler(void* sampler)
+{
     llama_sampler_chain_add(static_cast<llama_sampler*>(sampler), llama_sampler_init_softmax());
-    llama_sampler_chain_add(static_cast<llama_sampler*>(sampler), llama_sampler_init_dist(1337));
     return sampler;
 }
 
-void* TopP(void* sampler, const float p, const float minKeep)
+// Independent of order, but typically applied after topK or topP
+void* TailFreeSampler(void* sampler, float z, size_t minKeep)
 {
-    llama_sampler_chain_add(static_cast<llama_sampler*>(sampler), llama_sampler_init_top_p(p, minKeep));
+    llama_sampler_chain_add(static_cast<llama_sampler*>(sampler), llama_sampler_init_tail_free(z, minKeep));
     return sampler;
 }
 
-std::optional<std::string> TokenToPiece(llama_model* llamaModel, unsigned id)
+// Typically applied early in the sampling chain
+void* TempSampler(void* sampler, float temp)
+{
+    llama_sampler_chain_add(static_cast<llama_sampler*>(sampler), llama_sampler_init_temp(temp));
+    return sampler;
+}
+
+// Typically applied early in the sampling chain
+void* TempExtSampler(void* sampler, float temp, float dynatempRange, float dynatempExponent)
+{
+    llama_sampler_chain_add(static_cast<llama_sampler*>(sampler), llama_sampler_init_temp_ext(temp, dynatempRange, dynatempExponent));
+    return sampler;
+}
+
+// Typically applied early in the sampling chain
+void* TopKSampler(void* sampler, int topK)
+{
+    llama_sampler_chain_add(static_cast<llama_sampler*>(sampler), llama_sampler_init_top_k(topK));
+    return sampler;
+}
+
+// Typically applied after topKSampler
+void* TopPSampler(void* sampler, float topP, size_t minKeep)
+{
+    llama_sampler_chain_add(static_cast<llama_sampler*>(sampler), llama_sampler_init_top_p(topP, minKeep));
+    return sampler;
+}
+
+// Independent of order, but typically applied after topK or topP
+void* TypicalSampler(void* sampler, float typicalP, size_t minKeep)
+{
+    llama_sampler_chain_add(static_cast<llama_sampler*>(sampler), llama_sampler_init_typical(typicalP, minKeep));
+    return sampler;
+}
+
+// Independent of order
+void* XtcSampler(void* sampler, float xtcProbability, float xtcThreshold, size_t minKeep, uint32_t seed)
+{
+    llama_sampler_chain_add(static_cast<llama_sampler*>(sampler), llama_sampler_init_xtc(xtcProbability, xtcThreshold, minKeep, seed));
+    return sampler;
+}
+
+std::optional<std::string> TokenToPiece(const llama_model* llamaModel, const unsigned id)
 {
     char buf[128];
     int n = llama_token_to_piece(llamaModel, id, buf, sizeof(buf), 0, true);
@@ -118,7 +178,7 @@ std::optional<std::string> TokenToPiece(llama_model* llamaModel, unsigned id)
     return std::string{buf, static_cast<size_t>(n)};
 }
 
-std::optional<std::vector<llama_token>> TokenizePrompt(llama_model* llamaModel, const std::string_view& prompt)
+std::optional<std::vector<llama_token>> TokenizePrompt(const llama_model* llamaModel, const std::string_view& prompt)
 {
     const int n_prompt = -llama_tokenize(llamaModel, prompt.data(), prompt.size(), nullptr, 0, true, true);
     std::vector<llama_token> tokenizedPrompt(n_prompt);

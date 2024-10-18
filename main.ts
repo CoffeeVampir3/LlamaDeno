@@ -1,6 +1,8 @@
-// main.ts
+interface LogitBias {
+    token: number;  // This corresponds to llama_token (int32_t)
+    bias: number;   // This corresponds to float
+}
 
-// Define the library interface
 const libInterface = {
     LoadModel: {
         parameters: [
@@ -18,21 +20,75 @@ const libInterface = {
         result: "pointer" as const  // void*
     },
     MakeSampler: {
-        parameters: [
-            "pointer",  // void* llamaModel
-        ],
+        parameters: [],
+        result: "pointer" as const  // void*
+    },
+    DistSampler: {
+        parameters: ["pointer", "u32"],  // void* sampler, uint32_t seed
+        result: "pointer" as const  // void*
+    },
+    GrammarSampler: {
+        parameters: ["pointer", "pointer", "pointer", "pointer"],  // void* sampler, const llama_model* model, const char* grammar, const char* root
         result: "pointer" as const  // void*
     },
     GreedySampler: {
         parameters: ["pointer"],  // void* sampler
         result: "pointer" as const  // void*
     },
-    TopK: {
-        parameters: ["pointer", "i32"],  // void* sampler, int num
+    InfillSampler: {
+        parameters: ["pointer", "pointer"],  // void* sampler, const llama_model* model
         result: "pointer" as const  // void*
     },
-    TopP: {
-        parameters: ["pointer", "f32", "f32"],  // void* sampler, float p, float minKeep
+    LogitBiasSampler: {
+        parameters: ["pointer", "pointer", "usize", "pointer"],  // void* sampler, const struct llama_model* model, size_t nBias, const llama_logit_bias* logitBias
+        result: "pointer" as const  // void*
+    },
+    MinPSampler: {
+        parameters: ["pointer", "f32", "usize"],  // void* sampler, float minP, size_t minKeep
+        result: "pointer" as const  // void*
+    },
+    MirostatSampler: {
+        parameters: ["pointer", "i32", "u32", "f32", "f32", "i32"],  // void* sampler, int nVocab, uint32_t seed, float tau, float eta, int m
+        result: "pointer" as const  // void*
+    },
+    MirostatV2Sampler: {
+        parameters: ["pointer", "u32", "f32", "f32"],  // void* sampler, uint32_t seed, float tau, float eta
+        result: "pointer" as const  // void*
+    },
+    PenaltiesSampler: {
+        parameters: ["pointer", "i32", "i32", "i32", "i32", "f32", "f32", "f32", "bool", "bool"],  // void* sampler, int nVocab, llama_token eosToken, llama_token nlToken, int penaltyLastN, float penaltyRepeat, float penaltyFreq, float penaltyPresent, bool penalizeNl, bool ignoreEos
+        result: "pointer" as const  // void*
+    },
+    SoftmaxSampler: {
+        parameters: ["pointer"],  // void* sampler
+        result: "pointer" as const  // void*
+    },
+    TailFreeSampler: {
+        parameters: ["pointer", "f32", "usize"],  // void* sampler, float z, size_t minKeep
+        result: "pointer" as const  // void*
+    },
+    TempSampler: {
+        parameters: ["pointer", "f32"],  // void* sampler, float temp
+        result: "pointer" as const  // void*
+    },
+    TempExtSampler: {
+        parameters: ["pointer", "f32", "f32", "f32"],  // void* sampler, float temp, float dynatempRange, float dynatempExponent
+        result: "pointer" as const  // void*
+    },
+    TopKSampler: {
+        parameters: ["pointer", "i32"],  // void* sampler, int topK
+        result: "pointer" as const  // void*
+    },
+    TopPSampler: {
+        parameters: ["pointer", "f32", "usize"],  // void* sampler, float topP, size_t minKeep
+        result: "pointer" as const  // void*
+    },
+    TypicalSampler: {
+        parameters: ["pointer", "f32", "usize"],  // void* sampler, float typicalP, size_t minKeep
+        result: "pointer" as const  // void*
+    },
+    XtcSampler: {
+        parameters: ["pointer", "f32", "f32", "usize", "u32"],  // void* sampler, float xtcProbability, float xtcThreshold, size_t minKeep, uint32_t seed
         result: "pointer" as const  // void*
     },
     Infer: {
@@ -49,9 +105,21 @@ const libInterface = {
 
 class SamplerBuilder {
     private sampler: Deno.PointerValue;
+    private readonly model: Deno.PointerValue;
 
-    constructor(private lib: Deno.DynamicLibrary<typeof libInterface>, llamaModel: Deno.PointerValue) {
-        this.sampler = this.lib.symbols.MakeSampler(llamaModel);
+    constructor(private lib: Deno.DynamicLibrary<typeof libInterface>, model: Deno.PointerValue) {
+        this.sampler = this.lib.symbols.MakeSampler();
+        this.model = model;
+    }
+
+    distSampler(seed: number): this {
+        this.sampler = this.lib.symbols.DistSampler(this.sampler, seed);
+        return this;
+    }
+
+    grammarSampler(model: Deno.PointerValue, grammar: string, root: string): this {
+        this.sampler = this.lib.symbols.GrammarSampler(this.sampler, model, grammar, root);
+        return this;
     }
 
     greedy(): this {
@@ -59,13 +127,89 @@ class SamplerBuilder {
         return this;
     }
 
+    infillSampler(model: Deno.PointerValue): this {
+        this.sampler = this.lib.symbols.InfillSampler(this.sampler, model);
+        return this;
+    }
+
+    logitBiasSampler(logitBias: LogitBias[]): this {
+        const nBias = logitBias.length;
+
+        // Create a buffer to hold the llama_logit_bias structures
+        const bufferSize = nBias * 8;  // 4 bytes for token (int32) + 4 bytes for bias (float)
+        const buffer = new ArrayBuffer(bufferSize);
+        const view = new DataView(buffer);
+
+        // Fill the buffer with the logit bias data
+        logitBias.forEach((bias, index) => {
+            view.setInt32(index * 8, bias.token, true);  // true for little-endian
+            view.setFloat32(index * 8 + 4, bias.bias, true);  // true for little-endian
+        });
+
+        // Get a pointer to the buffer
+        const ptr = Deno.UnsafePointer.of(buffer);
+
+        this.sampler = this.lib.symbols.LogitBiasSampler(this.sampler, this.model, nBias, ptr);
+        return this;
+    }
+
+    minPSampler(minP: number, minKeep: number): this {
+        this.sampler = this.lib.symbols.MinPSampler(this.sampler, minP, minKeep);
+        return this;
+    }
+
+    mirostatSampler(nVocab: number, seed: number, tau: number, eta: number, m: number): this {
+        this.sampler = this.lib.symbols.MirostatSampler(this.sampler, nVocab, seed, tau, eta, m);
+        return this;
+    }
+
+    mirostatV2Sampler(seed: number, tau: number, eta: number): this {
+        this.sampler = this.lib.symbols.MirostatV2Sampler(this.sampler, seed, tau, eta);
+        return this;
+    }
+
+    penaltiesSampler(nVocab: number, eosToken: number, nlToken: number, penaltyLastN: number, penaltyRepeat: number, penaltyFreq: number, penaltyPresent: number, penalizeNl: boolean, ignoreEos: boolean): this {
+        this.sampler = this.lib.symbols.PenaltiesSampler(this.sampler, nVocab, eosToken, nlToken, penaltyLastN, penaltyRepeat, penaltyFreq, penaltyPresent, penalizeNl, ignoreEos);
+        return this;
+    }
+
+    softmaxSampler(): this {
+        this.sampler = this.lib.symbols.SoftmaxSampler(this.sampler);
+        return this;
+    }
+
+    tailFreeSampler(z: number, minKeep: number): this {
+        this.sampler = this.lib.symbols.TailFreeSampler(this.sampler, z, minKeep);
+        return this;
+    }
+
+    tempSampler(temp: number): this {
+        this.sampler = this.lib.symbols.TempSampler(this.sampler, temp);
+        return this;
+    }
+
+    tempExtSampler(temp: number, dynatempRange: number, dynatempExponent: number): this {
+        this.sampler = this.lib.symbols.TempExtSampler(this.sampler, temp, dynatempRange, dynatempExponent);
+        return this;
+    }
+
     topK(num: number): this {
-        this.sampler = this.lib.symbols.TopK(this.sampler, num);
+        this.sampler = this.lib.symbols.TopKSampler(this.sampler, num);
         return this;
     }
 
     topP(p: number, minKeep: number): this {
-        this.sampler = this.lib.symbols.TopP(this.sampler, p, minKeep);
+        this.sampler = this.lib.symbols.TopPSampler(this.sampler, p, minKeep);
+        return this;
+    }
+
+    typicalSampler(typicalP: number, minKeep: number): this {
+        this.sampler = this.lib.symbols.TypicalSampler(this.sampler, typicalP, minKeep);
+        return this;
+    }
+
+    xtcSampler(xtcProbability: number, xtcThreshold: number, minKeep: number, seed: number): this {
+        this.sampler = this.lib.symbols.XtcSampler(this.sampler, xtcProbability, xtcThreshold, minKeep, seed);
         return this;
     }
 
@@ -121,7 +265,9 @@ try {
     // GreedySampler
     const samplerBuilder = new SamplerBuilder(lib, llamaModel);
     const sampler = samplerBuilder
+        .tempSampler(15.0)
         .topK(40)
+        .distSampler(1337)
         .build();
 
     // For Infer, we need to create a vector of tokens
