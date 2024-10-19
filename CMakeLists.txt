@@ -14,16 +14,26 @@ FetchContent_Declare(
         GIT_TAG master
 )
 
+set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+
 # Disable unused components
 set(LLAMA_BUILD_EXAMPLES OFF CACHE BOOL "llama.cpp: build examples" FORCE)
 set(LLAMA_BUILD_TESTS OFF CACHE BOOL "llama.cpp: build tests" FORCE)
 set(LLAMA_BUILD_SERVER OFF CACHE BOOL "llama.cpp: build server" FORCE)
+
+set(GGML_CUDA ON CACHE BOOL "Enable CUDA" FORCE)
 
 if(MSVC)
     add_compile_options(/D_CRT_SECURE_NO_WARNINGS)
 endif()
 
 FetchContent_MakeAvailable(llama)
+
+## THE ORDER IS IMPORTANT! FETCH CONTENT BUILDS WITH THE SETTINGS DEFINED _ABOVE_ IT!
+#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
+#set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -stdlib=libc++")
+#set(CMAKE_C_COMPILER /usr/bin/clang)
+#set(CMAKE_CXX_COMPILER /usr/bin/clang++)
 
 add_library(deno_cpp_binding SHARED
         binding.cpp

@@ -9,7 +9,6 @@ extern "C" {
     void* LoadModel(const char *modelPath, int numberGpuLayers);
     void* InitiateCtx(void* llamaModel, unsigned contextLength, unsigned numBatches);
 
-
     /* SAMPLERS
      * */
     void* MakeSampler();
