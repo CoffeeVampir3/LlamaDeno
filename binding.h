@@ -1,8 +1,6 @@
-#include "llama.h"
-#include "common/common.h"
-
 #ifndef BINDING_H
 #define BINDING_H
+#include "llama.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -35,7 +33,6 @@ extern "C" {
     /* SAMPLERS
      * */
 
-
     void Infer(
         void* llamaModelPtr,
         void* samplerPtr,
@@ -46,5 +43,4 @@ extern "C" {
 #ifdef __cplusplus
 }
 #endif
-
 #endif // BINDING_H

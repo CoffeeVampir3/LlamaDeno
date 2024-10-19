@@ -256,8 +256,7 @@ try {
         Deno.UnsafePointer.of(modelPathPtr),
         numberGpuLayers
     );
-
-    // InitiateCtx
+    
     const context = lib.symbols.InitiateCtx(
         llamaModel,
         contextLength,

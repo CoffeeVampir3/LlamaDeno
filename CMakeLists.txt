@@ -20,10 +20,7 @@ set(LLAMA_BUILD_TESTS OFF CACHE BOOL "llama.cpp: build tests" FORCE)
 set(LLAMA_BUILD_SERVER OFF CACHE BOOL "llama.cpp: build server" FORCE)
 
 if(MSVC)
-    add_compile_definitions(
-            _CRT_SECURE_NO_WARNINGS
-            LLAMA_CPP_PROB_FIX         # Add this definition for MSVC
-    )
+    add_compile_options(/D_CRT_SECURE_NO_WARNINGS)
 endif()
 
 FetchContent_MakeAvailable(llama)

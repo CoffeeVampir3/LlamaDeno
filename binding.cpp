@@ -2,6 +2,7 @@
 
 #include <iostream>
 #include <optional>
+#include <vector>
 
 void* LoadModel(const char *modelPath, int numberGpuLayers)
 {
@@ -9,6 +10,9 @@ void* LoadModel(const char *modelPath, int numberGpuLayers)
     model_params.n_gpu_layers = numberGpuLayers;
 
     llama_model* model = llama_load_model_from_file(modelPath, model_params);
+
+    llama_add_bos_token(model);
+    llama_add_eos_token(model);
 
     return model;
 }
@@ -200,7 +204,7 @@ void Infer(
     auto promptTokens = TokenizePrompt(llamaModel, prompt).value();
 
     const int numTokensToGenerate = (promptTokens.size() - 1) + numberTokensToPredict;
-    llama_batch batch = llama_batch_get_one(promptTokens.data(), promptTokens.size(), 0, 0);
+    llama_batch batch = llama_batch_get_one(promptTokens.data(), promptTokens.size());
 
     int nDecode = 0;
     llama_token newTokenId;
@@ -227,7 +231,7 @@ void Infer(
             std::flush(std::cout);
 
             // prepare the next batch with the sampled token
-            batch = llama_batch_get_one(&newTokenId, 1, tokenPosition, 0);
+            batch = llama_batch_get_one(&newTokenId, 1);
 
             nDecode += 1;
         }
