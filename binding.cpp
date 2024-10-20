@@ -17,6 +17,48 @@ void* LoadModel(const char *modelPath, int numberGpuLayers)
     return model;
 }
 
+struct ReadbackBuffer
+{
+    unsigned lastReadbackIndex {0};
+    bool done {false};
+    std::vector<char*>* data{};
+};
+
+bool IsReadbackBufferDone(void* readbackBufferPtr)
+{
+    return static_cast<ReadbackBuffer*>(readbackBufferPtr)->done;
+}
+
+void* CreateReadbackBuffer()
+{
+    return new ReadbackBuffer {
+        .lastReadbackIndex = 0,
+        .data = new std::vector<char*>()
+    };
+}
+
+void WriteToReadbackBuffer(void* readbackBufferPtr, char* stringData)
+{
+    auto* buffer = static_cast<ReadbackBuffer*>(readbackBufferPtr);
+    buffer->data->push_back(stringData);
+}
+
+void* ReadbackNext(void* readbackBufferPtr)
+{
+    auto* buffer = static_cast<ReadbackBuffer*>(readbackBufferPtr);
+
+    //we're racing faster than writes or at the end of the buffer.
+    if (buffer->lastReadbackIndex >= buffer->data->size())
+    {
+        return nullptr;
+    }
+
+    char* stringPtr = buffer->data->at(buffer->lastReadbackIndex);
+    buffer->lastReadbackIndex++;
+
+    return stringPtr;
+}
+
 void* InitiateCtx(void* llamaModel, const unsigned contextLength, const unsigned numBatches)
 {
     auto* model = static_cast<llama_model*>(llamaModel);
@@ -236,6 +278,54 @@ void Infer(
             nDecode += 1;
         }
     }
+}
+
+void InferToReadbackBuffer(
+    void* llamaModelPtr,
+    void* samplerPtr,
+    void* contextPtr,
+    void* readbackBufferPtr,
+    const char *prompt,
+    const unsigned numberTokensToPredict)
+{
+    const auto llamaModel = static_cast<llama_model*>(llamaModelPtr);
+    const auto sampler = static_cast<llama_sampler*>(samplerPtr);
+    const auto context = static_cast<llama_context*>(contextPtr);
+
+    auto promptTokens = TokenizePrompt(llamaModel, prompt).value();
+
+    const int numTokensToGenerate = (promptTokens.size() - 1) + numberTokensToPredict;
+    llama_batch batch = llama_batch_get_one(promptTokens.data(), promptTokens.size());
+
+    llama_token newTokenId;
+    int tokenPosition = 0;
+    //inference
+    for (tokenPosition = 0; tokenPosition + batch.n_tokens < numTokensToGenerate; ++tokenPosition ) {
+        // evaluate the current batch with the transformer model
+        if (llama_decode(context, batch)) {
+            std::cerr << "error: failed to eval, return code 1 in Infer()" << std::endl;
+            return;
+        }
+
+        tokenPosition += batch.n_tokens;
+
+        // sample the next token
+        {
+            newTokenId = llama_sampler_sample(sampler, context, -1);
+
+            // is it an end of generation?
+            if (llama_token_is_eog(llamaModel, newTokenId)) {
+                break;
+            }
+
+            auto piece = TokenToPiece(llamaModel, newTokenId).value();
+            WriteToReadbackBuffer(readbackBufferPtr, strdup(piece.c_str()));
+
+            // prepare the next batch with the sampled token
+            batch = llama_batch_get_one(&newTokenId, 1);
+        }
+    }
+    static_cast<ReadbackBuffer*>(readbackBufferPtr)->done = true;
 }
 
 void FreeSampler(llama_sampler* sampler)

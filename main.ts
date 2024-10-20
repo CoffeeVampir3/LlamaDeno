@@ -101,6 +101,30 @@ const libInterface = {
         ],
         result: "void" as const
     },
+    InferToReadbackBuffer: {
+        parameters: [
+            "pointer",  // void* llamaModelPtr
+            "pointer",  // void* samplerPtr
+            "pointer",  // void* contextPtr
+            "pointer",  // void* readbackBufferPtr
+            "pointer",  // const char* prompt
+            "u32",      // const unsigned numberTokensToPredict
+        ],
+        result: "void" as const,
+        nonblocking:true,
+    },
+    CreateReadbackBuffer: {
+        parameters: [],
+        result: "pointer" as const  // void*
+    },
+    ReadbackNext: {
+        parameters: ["pointer"],  // void* readbackBufferPtr
+        result: "pointer" as const  // void*
+    },
+    IsReadbackBufferDone: {
+        parameters: ["pointer"],  // void* readbackBufferPtr
+        result: "bool" as const
+    },
 } as const;
 
 class SamplerBuilder {
@@ -220,6 +244,44 @@ class SamplerBuilder {
     }
 }
 
+function createReadbackBuffer(lib: Deno.DynamicLibrary<typeof libInterface>): Deno.PointerValue {
+    return lib.symbols.CreateReadbackBuffer();
+}
+
+function readNextFromReadbackBuffer(lib: Deno.DynamicLibrary<typeof libInterface>, bufferPtr: Deno.PointerValue): string | null {
+    const stringPtr = lib.symbols.ReadbackNext(bufferPtr);
+
+    if (stringPtr === null) {
+        return null;
+    }
+
+    const cString = new Deno.UnsafePointerView(stringPtr);
+    return cString.getCString();
+}
+function isReadbackBufferDone(
+    lib: Deno.DynamicLibrary<typeof libInterface>,
+    readbackBufferPtr: Deno.PointerValue
+): boolean {
+    return lib.symbols.IsReadbackBufferDone(readbackBufferPtr);
+}
+
+function sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function readFromBuffer(lib: Deno.DynamicLibrary<typeof libInterface>, readbackBuffer: Deno.PointerValue) {
+    const encoder = new TextEncoder();
+    while (!isReadbackBufferDone(lib, readbackBuffer)) {
+        const nextString = readNextFromReadbackBuffer(lib, readbackBuffer);
+        if (nextString === null) {
+            // Wait for 50ms before checking again
+            await sleep(10);
+            continue;
+        }
+        Deno.stdout.writeSync(encoder.encode(nextString));
+    }
+}
+
 // Define the library name and path
 const libName = "deno_cpp_binding";
 const libSuffix = {
@@ -242,16 +304,15 @@ try {
 
     console.log("Library loaded successfully.");
 
-    // Example usage of the functions
+    const readbackBuffer = createReadbackBuffer(lib);
+    console.log("Readback buffer created.");
+
     const modelPath = "/home/blackroot/Desktop/LlamaDeno/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf";
     const numberGpuLayers = 40;
     const contextLength = 2048;
     const numBatches = 1;
-    const numberTokensToPredict = 20;
-
     const modelPathPtr = new TextEncoder().encode(modelPath + "\0");
 
-    // LoadModel
     const llamaModel = lib.symbols.LoadModel(
         Deno.UnsafePointer.of(modelPathPtr),
         numberGpuLayers
@@ -271,19 +332,23 @@ try {
         .distSampler(1337)
         .build();
 
-    // For Infer, we need to create a vector of tokens
-    // This is a simplified example and may need adjustment based on your actual implementation
     const prompt = "Hello, how are you?";
     const promptPtr = new TextEncoder().encode(prompt + "\0");
 
-    // Infer
-    lib.symbols.Infer(
-        llamaModel,
-        sampler,
-        context,
-        Deno.UnsafePointer.of(promptPtr),
-        numberTokensToPredict
-    );
+    const startTime = performance.now();
+    lib.symbols.InferToReadbackBuffer(llamaModel, sampler, context, readbackBuffer, Deno.UnsafePointer.of(promptPtr), 2000);
+    //
+    await readFromBuffer(lib, readbackBuffer);
+    const endTime = performance.now();
+
+    console.log("\n\n\n\n");
+
+    const totalTimeSeconds = (endTime - startTime) / 1000; // Convert to seconds
+    const tokensPerSecond = 2000 / totalTimeSeconds;
+
+    console.log(`\n\nTotal time: ${totalTimeSeconds.toFixed(2)} seconds`);
+    console.log(`Tokens generated: ${2000}`);
+    console.log(`Tokens per second: ${tokensPerSecond.toFixed(2)}`);
 
     // Close the library when done
     lib.close();

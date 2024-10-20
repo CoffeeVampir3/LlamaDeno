@@ -9,6 +9,11 @@ extern "C" {
     void* LoadModel(const char *modelPath, int numberGpuLayers);
     void* InitiateCtx(void* llamaModel, unsigned contextLength, unsigned numBatches);
 
+    void* CreateReadbackBuffer();
+    void* ReadbackNext(void* readbackBufferPtr);
+    void WriteToReadbackBuffer(void* readbackBufferPtr, char* stringData);
+    bool IsReadbackBufferDone(void* readbackBufferPtr);
+
     /* SAMPLERS
      * */
     void* MakeSampler();
@@ -38,6 +43,14 @@ extern "C" {
         void* contextPtr,
         const char *prompt,
         unsigned numberTokensToPredict);
+
+    void InferToReadbackBuffer(
+        void* llamaModelPtr,
+        void* samplerPtr,
+        void* contextPtr,
+        void* readbackBufferPtr,
+        const char *prompt,
+        const unsigned numberTokensToPredict);
 
 #ifdef __cplusplus
 }
