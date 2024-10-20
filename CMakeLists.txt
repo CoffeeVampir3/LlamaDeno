@@ -27,10 +27,12 @@ set(GGML_CUDA ON CACHE BOOL "Enable CUDA" FORCE)
 FetchContent_MakeAvailable(llama)
 
 ## THE ORDER IS IMPORTANT! FETCH CONTENT BUILDS WITH THE SETTINGS DEFINED _ABOVE_ IT!
-#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
-#set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -stdlib=libc++")
-#set(CMAKE_C_COMPILER /usr/bin/clang)
-#set(CMAKE_CXX_COMPILER /usr/bin/clang++)
+if(STDCLANG)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -stdlib=libc++")
+    set(CMAKE_C_COMPILER /usr/bin/clang)
+    set(CMAKE_CXX_COMPILER /usr/bin/clang++)
+endif()
 
 add_library(deno_cpp_binding SHARED
         binding.cpp
